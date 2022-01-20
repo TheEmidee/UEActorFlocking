@@ -1,12 +1,9 @@
 #include "AFFlockingComponent.h"
 
-#include "GameFramework/CharacterMovementComponent.h"
-
 #include <Curves/CurveFloat.h>
 #include <DrawDebugHelpers.h>
-#include <Engine/World.h>
 #include <GameFramework/Character.h>
-#include <TimerManager.h>
+#include <GameFramework/CharacterMovementComponent.h>
 
 namespace
 {
