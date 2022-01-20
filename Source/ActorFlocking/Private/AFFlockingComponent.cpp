@@ -171,10 +171,7 @@ void UAFFlockingComponent::TickComponent( const float delta_time, const ELevelTi
         BoidsData.Emplace( *boid_movement_component );
     }
 
-    for ( auto index = 0; index < BoidsData.Num(); ++index )
-    {
-        UpdateSteeringVelocityIgnoringUID( BoidsData[ index ], index );
-    }
+    UpdateBoidsSteeringVelocity();
 
     for ( auto index = 0; index < BoidsData.Num(); ++index )
     {
@@ -182,118 +179,112 @@ void UAFFlockingComponent::TickComponent( const float delta_time, const ELevelTi
     }
 }
 
-void UAFFlockingComponent::UpdateSteeringVelocityIgnoringUID( FAFBoidsData & flock_data, const int32 ignore_this_uid )
+void UAFFlockingComponent::UpdateBoidsSteeringVelocity()
 {
-    const auto velocity = flock_data.Velocity;
-    /*const auto flock_index_in_array = Boids.IndexOfByPredicate( [ &flock_data ]( const FAFBoidsData & item ) {
-        return item.Index == flock_data.Index;
-    } );*/
     const auto owner = GetOwner();
     const auto actor_forward_vector = owner->GetActorForwardVector();
 
-    FVector separation_force( 0.0f ),
-        alignment_force( 0.0f ),
-        cohesion_force( 0.0f );
-
-    auto separation_boids_count = 0,
-         alignment_boids_count = 0,
-         cohesion_boids_count = 0;
-
-    for ( auto index = 0; index < BoidsData.Num(); index++ )
+    for ( auto boid_index = 0; boid_index < BoidsData.Num(); ++boid_index )
     {
-        if ( ignore_this_uid == index )
+        auto & flock_data = BoidsData[ boid_index ];
+        const auto velocity = flock_data.Velocity;
+
+        FVector separation_force( 0.0f ),
+            alignment_force( 0.0f ),
+            cohesion_force( 0.0f );
+
+        auto separation_boids_count = 0,
+             alignment_boids_count = 0,
+             cohesion_boids_count = 0;
+
+        for ( const auto & other_flock_data : BoidsData )
         {
-            continue;
+            const auto to_other = other_flock_data.Center - flock_data.Center;
+            const auto distance = to_other.Size();
+
+            if ( distance < FlockSettings.AlignmentRadius )
+            {
+                alignment_force += other_flock_data.Velocity;
+                alignment_boids_count++;
+            }
+
+            if ( distance < FlockSettings.CohesionRadius )
+            {
+                cohesion_force += other_flock_data.Center;
+                cohesion_boids_count++;
+            }
+
+            if ( distance < FlockSettings.SeparationRadius )
+            {
+                separation_force += to_other * ( 1.0f - FMath::Clamp( distance / FlockSettings.SeparationRadius, 0.0f, 1.0f ) );
+                separation_boids_count++;
+            }
         }
 
-        auto & other_flock_data = BoidsData[ index ];
-
-        const auto to_other = other_flock_data.Center - flock_data.Center;
-        const auto distance = to_other.Size();
-
-        if ( distance < FlockSettings.AlignmentRadius )
+        if ( alignment_boids_count > 0 )
         {
-            alignment_force += other_flock_data.Velocity;
-            alignment_boids_count++;
+            alignment_force /= alignment_boids_count;
         }
 
-        if ( distance < FlockSettings.CohesionRadius )
+        if ( cohesion_boids_count > 0 )
         {
-            cohesion_force += other_flock_data.Center;
-            cohesion_boids_count++;
+            cohesion_force /= cohesion_boids_count;
+            cohesion_force -= flock_data.Center;
+            cohesion_force.Normalize();
+            cohesion_force *= flock_data.MaxVelocity;
         }
 
-        if ( distance < FlockSettings.SeparationRadius )
+        if ( separation_boids_count > 0 )
         {
-            separation_force += to_other * ( 1.0f - FMath::Clamp( distance / FlockSettings.SeparationRadius, 0.0f, 1.0f ) );
-            separation_boids_count++;
+            separation_force /= separation_boids_count;
+            separation_force *= -1.0f;
+            separation_force.Normalize();
+            separation_force *= flock_data.MaxVelocity;
         }
+
+        const auto pursuit_offset_multiplier = FlockSettings.QueueCurve != nullptr
+                                                   ? FlockSettings.QueueCurve->GetFloatValue( boid_index )
+                                                   : 1.0f;
+
+        const auto pursuit_target = owner->GetActorLocation() - actor_forward_vector * FlockSettings.PursuitDistanceBehind * pursuit_offset_multiplier;
+
+        const auto seek_force = Pursuit( flock_data, pursuit_target, owner->GetVelocity(), FlockSettings.PursuitSlowdownRadius );
+
+        const auto draw_debug_line = [ world = GetWorld(), &flock_data ]( const FVector & end_offset, const FColor & color ) {
+            DrawDebugLine( world, flock_data.Center, flock_data.Center + end_offset, color, false, -1.0f, SDPG_World, 5.0f );
+        };
+
+        if ( Debug.bDrawPursuitForce )
+        {
+            draw_debug_line( seek_force * FlockSettings.PursuitWeight, FColor::Green );
+        }
+        if ( Debug.bDrawAlignmentForce )
+        {
+            draw_debug_line( cohesion_force * FlockSettings.CohesionWeight, FColor::Yellow );
+        }
+        if ( Debug.bDrawCohesionForce )
+        {
+            draw_debug_line( alignment_force * FlockSettings.AlignmentWeight, FColor::Blue );
+        }
+        if ( Debug.bDrawSeparationForce )
+        {
+            draw_debug_line( separation_force * FlockSettings.SeparationWeight, FColor::Magenta );
+        }
+        if ( Debug.bDrawBoidSphere )
+        {
+            DrawDebugSphere( GetWorld(), flock_data.Center, 125.0f, 32, FColor::Blue );
+        }
+
+        auto result = velocity + seek_force * FlockSettings.PursuitWeight + cohesion_force * FlockSettings.CohesionWeight + alignment_force * FlockSettings.AlignmentWeight + separation_force * FlockSettings.SeparationWeight;
+        const auto direction = result.GetSafeNormal();
+
+        const auto dot = FVector::DotProduct( direction, actor_forward_vector );
+
+        if ( dot < 0.0f )
+        {
+            result += result * -FlockSettings.NonForwardVelocityBrakingFactor;
+        }
+
+        flock_data.SteeringVelocity = result.GetSafeNormal() * flock_data.MaxVelocity;
     }
-
-    if ( alignment_boids_count > 0 )
-    {
-        alignment_force /= alignment_boids_count;
-    }
-
-    if ( cohesion_boids_count > 0 )
-    {
-        cohesion_force /= cohesion_boids_count;
-        cohesion_force -= flock_data.Center;
-        cohesion_force.Normalize();
-        cohesion_force *= flock_data.MaxVelocity;
-    }
-
-    if ( separation_boids_count > 0 )
-    {
-        separation_force /= separation_boids_count;
-        separation_force *= -1.0f;
-        separation_force.Normalize();
-        separation_force *= flock_data.MaxVelocity;
-    }
-
-    const auto pursuit_offset_multiplier = 1.0f;
-    /*FlockSettings.QueueCurve != nullptr
-                                               ? FlockSettings.QueueCurve->GetFloatValue( flock_index_in_array )
-                                               : 1.0f;*/
-
-    const auto pursuit_target = owner->GetActorLocation() - actor_forward_vector * FlockSettings.PursuitDistanceBehind * pursuit_offset_multiplier;
-
-    const auto seek_force = Pursuit( flock_data, pursuit_target, owner->GetVelocity(), FlockSettings.PursuitSlowdownRadius );
-
-    const auto draw_debug_line = [ world = GetWorld(), &flock_data ]( const FVector & end_offset, const FColor & color ) {
-        DrawDebugLine( world, flock_data.Center, flock_data.Center + end_offset, color, false, -1.0f, SDPG_World, 5.0f );
-    };
-
-    if ( Debug.bDrawPursuitForce )
-    {
-        draw_debug_line( seek_force * FlockSettings.PursuitWeight, FColor::Green );
-    }
-    if ( Debug.bDrawAlignmentForce )
-    {
-        draw_debug_line( cohesion_force * FlockSettings.CohesionWeight, FColor::Yellow );
-    }
-    if ( Debug.bDrawCohesionForce )
-    {
-        draw_debug_line( alignment_force * FlockSettings.AlignmentWeight, FColor::Blue );
-    }
-    if ( Debug.bDrawSeparationForce )
-    {
-        draw_debug_line( separation_force * FlockSettings.SeparationWeight, FColor::Magenta );
-    }
-    if ( Debug.bDrawBoidSphere )
-    {
-        DrawDebugSphere( GetWorld(), flock_data.Center, 125.0f, 32, FColor::Blue );
-    }
-
-    auto result = velocity + seek_force * FlockSettings.PursuitWeight + cohesion_force * FlockSettings.CohesionWeight + alignment_force * FlockSettings.AlignmentWeight + separation_force * FlockSettings.SeparationWeight;
-    const auto direction = result.GetSafeNormal();
-
-    const auto dot = FVector::DotProduct( direction, actor_forward_vector );
-
-    if ( dot < 0.0f )
-    {
-        result += result * -FlockSettings.NonForwardVelocityBrakingFactor;
-    }
-
-    flock_data.SteeringVelocity = result.GetSafeNormal() * flock_data.MaxVelocity;
 }

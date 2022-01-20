@@ -120,7 +120,7 @@ struct FAFBoidsData
     FVector SteeringVelocity;
 };
 
-UCLASS( ClassGroup = ( Custom ), meta = ( BlueprintSpawnableComponent ) )
+UCLASS( ClassGroup = Movement, hidecategories = ( Object, LOD, Lighting, Transform, Sockets, TextureStreaming ), meta = ( BlueprintSpawnableComponent ) )
 class ACTORFLOCKING_API UAFFlockingComponent final : public UActorComponent
 {
     GENERATED_BODY()
@@ -146,7 +146,7 @@ public:
     void TickComponent( float delta_time, ELevelTick tick_type, FActorComponentTickFunction * this_tick_function ) override;
 
 private:
-    void UpdateSteeringVelocityIgnoringUID( FAFBoidsData & flock_data, int32 ignore_this_uid );
+    void UpdateBoidsSteeringVelocity();
 
     UPROPERTY( EditAnywhere )
     FAFFlockingDebug Debug;
