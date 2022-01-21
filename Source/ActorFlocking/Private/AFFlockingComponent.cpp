@@ -4,6 +4,7 @@
 #include <DrawDebugHelpers.h>
 #include <GameFramework/Character.h>
 #include <GameFramework/CharacterMovementComponent.h>
+#include <TimerManager.h>
 
 namespace
 {
@@ -67,6 +68,13 @@ FAFFlockSettings::FAFFlockSettings()
     SeparationWeight = 1.0f;
     SeparationRadius = 300.0f;
     QueueCurve = nullptr;
+    bAllowSwapPositions = false;
+    SwapPositionDelayInterval.Min = 0.0f;
+    SwapPositionDelayInterval.Max = 0.0f;
+    SwapPositionDistanceInterval.Min = 1;
+    SwapPositionDistanceInterval.Max = 100;
+    SwapPositionBoidCountInterval.Min = 1;
+    SwapPositionBoidCountInterval.Max = 2;
 }
 
 void FAFFlockSettings::LerpBetween( const FAFFlockSettings & start, const FAFFlockSettings & end, const float ratio )
@@ -95,10 +103,19 @@ UAFFlockingComponent::UAFFlockingComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
     PrimaryComponentTick.bStartWithTickEnabled = true;
+    TransitionDuration = 0.0f;
+    TransitionTimer = 0.0f;
 }
 
 void UAFFlockingComponent::RegisterMovementComponent( UCharacterMovementComponent * movement_component )
 {
+    if ( movement_component == nullptr )
+    {
+        return;
+    }
+
+    ensureMsgf( movement_component->IsFlying(), TEXT( "You should register flying actors to the flock" ) );
+
     BoidsMovementComponents.AddUnique( movement_component );
 }
 
@@ -111,10 +128,7 @@ void UAFFlockingComponent::BeginPlay()
 {
     Super::BeginPlay();
 
-    if ( FlockSettingsData != nullptr )
-    {
-        SetSettings( FlockSettingsData );
-    }
+    SetSettings( FlockSettingsData );
 }
 
 #if WITH_EDITOR
@@ -144,6 +158,15 @@ void UAFFlockingComponent::SetSettings( UAFFlockSettingsData * new_settings )
     TransitionDuration = new_settings->TransitionDuration;
     TransitionTimer = TransitionDuration;
     FlockSettings.QueueCurve = new_settings->Settings.QueueCurve;
+    FlockSettings.bAllowSwapPositions = new_settings->Settings.bAllowSwapPositions;
+    FlockSettings.SwapPositionDistanceInterval = new_settings->Settings.SwapPositionDistanceInterval;
+    FlockSettings.SwapPositionDelayInterval = new_settings->Settings.SwapPositionDelayInterval;
+    FlockSettings.SwapPositionBoidCountInterval = new_settings->Settings.SwapPositionBoidCountInterval;
+
+    if ( HasBegunPlay() )
+    {
+        TrySetSwapBoidsPositionsTimer();
+    }
 }
 
 void UAFFlockingComponent::TickComponent( const float delta_time, const ELevelTick tick_type, FActorComponentTickFunction * this_tick_function )
@@ -284,4 +307,65 @@ void UAFFlockingComponent::UpdateBoidsSteeringVelocity()
 
         flock_data.SteeringVelocity = result.GetSafeNormal() * flock_data.MaxVelocity;
     }
+}
+
+void UAFFlockingComponent::TrySetSwapBoidsPositionsTimer()
+{
+    if ( FlockSettings.bAllowSwapPositions )
+    {
+        const auto delay = FMath::FRandRange( FlockSettings.SwapPositionDelayInterval.Min, FlockSettings.SwapPositionDelayInterval.Max );
+        GetWorld()->GetTimerManager().SetTimer( SwapBoidPositionTimerHandle, this, &UAFFlockingComponent::RandomSwapBoidsPositions, delay );
+    }
+}
+
+void UAFFlockingComponent::RandomSwapBoidsPositions()
+{
+    const auto boids_count = BoidsMovementComponents.Num();
+
+    if ( boids_count == 2 )
+    {
+        BoidsMovementComponents.Swap( 0, 1 );
+    }
+    else if ( boids_count > 2 )
+    {
+        auto boids_to_swap_count = FMath::RandRange( FlockSettings.SwapPositionBoidCountInterval.Min, FlockSettings.SwapPositionBoidCountInterval.Max );
+
+        while ( boids_to_swap_count > 0 )
+        {
+            const auto first_boid_index = FMath::RandRange( 0, boids_count - 1 );
+
+            TArray< int > indices;
+            indices.Reserve( BoidsMovementComponents.Num() - 1 );
+
+            const auto first_index = FMath::Max( 0, first_boid_index - FlockSettings.SwapPositionDistanceInterval.Max );
+            const auto last_index = FMath::Min( BoidsMovementComponents.Num(), first_boid_index + FlockSettings.SwapPositionDistanceInterval.Max );
+
+            for ( auto index = first_index; index < last_index; ++index )
+            {
+                if ( index == first_boid_index )
+                {
+                    continue;
+                }
+
+                if ( FMath::Abs( index - first_boid_index ) < FlockSettings.SwapPositionDistanceInterval.Min )
+                {
+                    continue;
+                }
+
+                indices.Add( index );
+            }
+
+            if ( indices.Num() >= 2 )
+            {
+                const auto random_index = FMath::RandRange( 0, indices.Num() - 1 );
+                const auto second_boid_index = indices[ random_index ];
+
+                BoidsMovementComponents.Swap( first_boid_index, second_boid_index );
+            }
+
+            --boids_to_swap_count;
+        }
+    }
+
+    TrySetSwapBoidsPositionsTimer();
 }

@@ -65,6 +65,25 @@ struct FAFFlockSettings
      */
     UPROPERTY( EditAnywhere )
     UCurveFloat * QueueCurve;
+
+    // Set to true to allow to randomly swap boids positions.
+    UPROPERTY( EditAnywhere )
+    uint8 bAllowSwapPositions : 1;
+
+    // Range of the delay at which boids positions can be swapped
+    UPROPERTY( EditAnywhere, meta = ( EditCondition = "bAllowSwapPositions", UIMin = "0", ClampMin = "0" ) )
+    FFloatInterval SwapPositionDelayInterval;
+
+    /* Distance interval between boids to swap.
+     * For example, if the minimum is set to 2, and the maximum to 4, and the first selected boid is at index 4,
+     * only boids at index 0,1,2,6,7,8 would be eligible for a swap
+     */
+    UPROPERTY( EditAnywhere, meta = ( EditCondition = "bAllowSwapPositions", UIMin = "1", ClampMin = "1" ) )
+    FInt32Interval SwapPositionDistanceInterval;
+
+    // Range of the number of boids to move
+    UPROPERTY( EditAnywhere, meta = ( EditCondition = "bAllowSwapPositions", UIMin = "1", ClampMin = "1" ) )
+    FInt32Interval SwapPositionBoidCountInterval;
 };
 
 UCLASS()
@@ -147,6 +166,8 @@ public:
 
 private:
     void UpdateBoidsSteeringVelocity();
+    void TrySetSwapBoidsPositionsTimer();
+    void RandomSwapBoidsPositions();
 
     UPROPERTY( EditAnywhere )
     FAFFlockingDebug Debug;
@@ -163,4 +184,5 @@ private:
     FAFFlockSettings FlockTargetSettings;
     float TransitionDuration;
     float TransitionTimer;
+    FTimerHandle SwapBoidPositionTimerHandle;
 };
