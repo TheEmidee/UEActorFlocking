@@ -86,7 +86,7 @@ struct FAFFlockSettings
     FInt32Interval SwapPositionBoidCountInterval;
 };
 
-UCLASS()
+UCLASS( BlueprintType )
 class UAFFlockSettingsData final : public UDataAsset
 {
     GENERATED_BODY()
