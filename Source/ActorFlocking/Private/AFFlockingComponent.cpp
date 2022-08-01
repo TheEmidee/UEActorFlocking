@@ -91,6 +91,15 @@ void FAFFlockSettings::LerpBetween( const FAFFlockSettings & start, const FAFFlo
     SeparationRadius = FMath::Lerp( start.SeparationRadius, end.SeparationRadius, ratio );
 }
 
+FAFFlockingDebug::FAFFlockingDebug() :
+    bDrawBoidSphere( false ),
+    bDrawPursuitForce( false ),
+    bDrawAlignmentForce( false ),
+    bDrawCohesionForce( false ),
+    bDrawSeparationForce( false )
+{
+}
+
 FAFBoidsData::FAFBoidsData( const UCharacterMovementComponent & movement_component ) :
     Center( movement_component.GetOwner()->GetActorLocation() ),
     Velocity( movement_component.GetOwner()->GetVelocity() ),
