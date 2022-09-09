@@ -109,6 +109,8 @@ struct FAFFlockingDebug
 {
     GENERATED_USTRUCT_BODY()
 
+    FAFFlockingDebug();
+
     UPROPERTY( EditInstanceOnly )
     uint8 bDrawBoidSphere : 1;
 
