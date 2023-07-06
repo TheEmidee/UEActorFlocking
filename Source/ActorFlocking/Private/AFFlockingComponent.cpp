@@ -204,7 +204,7 @@ void UAFFlockingComponent::TickComponent( const float delta_time, const ELevelTi
 
     for ( auto index = 0; index < BoidsData.Num(); ++index )
     {
-        BoidsMovementComponents[ index ]->RequestDirectMove( BoidsData[ index ].SteeringVelocity, false );
+        BoidsMovementComponents[ index ]->RequestDirectMove( BoidsData[ index ].SteeringVelocity, true );
     }
 }
 
@@ -212,6 +212,8 @@ void UAFFlockingComponent::UpdateBoidsSteeringVelocity()
 {
     const auto owner = GetOwner();
     const auto actor_forward_vector = owner->GetActorForwardVector();
+    const auto owner_velocity = owner->GetVelocity();
+    const auto owner_location = owner->GetActorLocation();
 
     for ( auto boid_index = 0; boid_index < BoidsData.Num(); ++boid_index )
     {
@@ -274,10 +276,9 @@ void UAFFlockingComponent::UpdateBoidsSteeringVelocity()
         const auto pursuit_offset_multiplier = FlockSettings.QueueCurve != nullptr
                                                    ? FlockSettings.QueueCurve->GetFloatValue( boid_index )
                                                    : 1.0f;
+        const auto pursuit_target = owner_location - actor_forward_vector * FlockSettings.PursuitDistanceBehind * pursuit_offset_multiplier;
 
-        const auto pursuit_target = owner->GetActorLocation() - actor_forward_vector * FlockSettings.PursuitDistanceBehind * pursuit_offset_multiplier;
-
-        const auto seek_force = Pursuit( flock_data, pursuit_target, owner->GetVelocity(), FlockSettings.PursuitSlowdownRadius );
+        const auto seek_force = Pursuit( flock_data, pursuit_target, owner_velocity, FlockSettings.PursuitSlowdownRadius );
 
         const auto draw_debug_line = [ world = GetWorld(), &flock_data ]( const FVector & end_offset, const FColor & color ) {
             DrawDebugLine( world, flock_data.Center, flock_data.Center + end_offset, color, false, -1.0f, SDPG_World, 5.0f );
@@ -314,7 +315,7 @@ void UAFFlockingComponent::UpdateBoidsSteeringVelocity()
             result += result * -FlockSettings.NonForwardVelocityBrakingFactor;
         }
 
-        flock_data.SteeringVelocity = result.GetSafeNormal() * flock_data.MaxVelocity;
+        flock_data.SteeringVelocity = direction * flock_data.MaxVelocity;
     }
 }
 
