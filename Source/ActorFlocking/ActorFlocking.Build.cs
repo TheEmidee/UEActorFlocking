@@ -8,7 +8,7 @@ namespace UnrealBuildTool.Rules
             : base( Target )
         {
             PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
-            bEnforceIWYU = true;
+            
             PrivatePCHHeaderFile = "Private/ActorFlockingPCH.h";
 
             PrivateIncludePaths.Add("ActorFlocking/Private");
