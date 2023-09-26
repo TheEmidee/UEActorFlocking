@@ -2,6 +2,7 @@
 
 #include <Curves/CurveFloat.h>
 #include <DrawDebugHelpers.h>
+#include <Engine/World.h>
 #include <GameFramework/Character.h>
 #include <GameFramework/CharacterMovementComponent.h>
 #include <TimerManager.h>
