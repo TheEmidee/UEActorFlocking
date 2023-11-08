@@ -7,6 +7,11 @@
 #include <GameFramework/CharacterMovementComponent.h>
 #include <TimerManager.h>
 
+DECLARE_STATS_GROUP( TEXT( "Flocking" ), STATGROUP_Flocking, STATCAT_Advanced );
+DECLARE_CYCLE_STAT( TEXT( "Flocking Tick" ), STAT_FlockingComponentTick, STATGROUP_Flocking );
+DECLARE_CYCLE_STAT( TEXT( "Flocking RequestDirectMove" ), STAT_FlockingComponentRequestDirectMove, STATGROUP_Flocking );
+DECLARE_CYCLE_STAT( TEXT( "Flocking Update Steering Velocity" ), STAT_FlockingComponentUpdateSteeringVelocity, STATGROUP_Flocking );
+
 namespace
 {
     FVector Seek( const FAFBoidsData & flock_data, const FVector & target, const float slowdown_distance = 100.0f )
@@ -181,6 +186,9 @@ void UAFFlockingComponent::SetSettings( UAFFlockSettingsData * new_settings )
 
 void UAFFlockingComponent::TickComponent( const float delta_time, const ELevelTick tick_type, FActorComponentTickFunction * this_tick_function )
 {
+    SCOPED_NAMED_EVENT( UAFFlockingComponent_TickComponent, FColor::Yellow );
+    SCOPE_CYCLE_COUNTER( STAT_FlockingComponentTick );
+
     Super::TickComponent( delta_time, tick_type, this_tick_function );
 
     TransitionTimer -= delta_time;
@@ -203,6 +211,7 @@ void UAFFlockingComponent::TickComponent( const float delta_time, const ELevelTi
 
     UpdateBoidsSteeringVelocity();
 
+    SCOPE_CYCLE_COUNTER( STAT_FlockingComponentRequestDirectMove );
     for ( auto index = 0; index < BoidsData.Num(); ++index )
     {
         BoidsMovementComponents[ index ]->RequestDirectMove( BoidsData[ index ].SteeringVelocity, true );
@@ -211,6 +220,8 @@ void UAFFlockingComponent::TickComponent( const float delta_time, const ELevelTi
 
 void UAFFlockingComponent::UpdateBoidsSteeringVelocity()
 {
+    SCOPE_CYCLE_COUNTER( STAT_FlockingComponentUpdateSteeringVelocity );
+
     const auto owner = GetOwner();
     const auto actor_forward_vector = owner->GetActorForwardVector();
     const auto owner_velocity = owner->GetVelocity();
