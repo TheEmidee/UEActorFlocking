@@ -229,8 +229,14 @@ void UAFFlockingComponent::UpdateBoidsSteeringVelocity()
              alignment_boids_count = 0,
              cohesion_boids_count = 0;
 
-        for ( const auto & other_flock_data : BoidsData )
+        for ( auto other_boid_index = 0; other_boid_index < BoidsData.Num(); ++other_boid_index )
         {
+            if ( other_boid_index == boid_index )
+            {
+                continue;
+            }
+
+            const auto & other_flock_data = BoidsData[ other_boid_index ];
             const auto to_other = other_flock_data.Center - flock_data.Center;
             const auto distance = to_other.Size();
 
